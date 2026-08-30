@@ -77,6 +77,14 @@ class StockfishExtension {
           opcode: 'rawLine',
           blockType: Scratch.BlockType.REPORTER,
           text: 'letzte Engine-Ausgabe'
+        },
+        {
+          opcode: 'setElo',
+          blockType: Scratch.BlockType.COMMAND,
+          text: 'setze Spielstärke auf Elo [ELO]',
+          arguments: {
+            ELO: { type: Scratch.ArgumentType.NUMBER, defaultValue: 1500 }
+          }
         }
       ]
     };
@@ -120,6 +128,17 @@ class StockfishExtension {
 
   rawLine() {
     return this.lastLine;
+  }
+
+  setElo(args) {
+    if (!this.worker) {
+      console.warn('Stockfish: Engine noch nicht bereit');
+      return;
+    }
+    // Begrenzt Elo auf den von Stockfish 10 unterstützten Bereich
+    const elo = Math.min(2850, Math.max(1350, Math.round(args.ELO)));
+    this.worker.postMessage('setoption name UCI_LimitStrength value true');
+    this.worker.postMessage(`setoption name UCI_Elo value ${elo}`);
   }
 }
 
