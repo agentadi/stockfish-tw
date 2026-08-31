@@ -85,6 +85,24 @@ class StockfishExtension {
           arguments: {
             ELO: { type: Scratch.ArgumentType.NUMBER, defaultValue: 1500 }
           }
+        },
+        {
+          opcode: 'setSkillLevel',
+          blockType: Scratch.BlockType.COMMAND,
+          text: 'setze Skill Level [LEVEL] (0=schwach, 20=stark)',
+          arguments: {
+            LEVEL: { type: Scratch.ArgumentType.NUMBER, defaultValue: 3 }
+          }
+        },
+        {
+          opcode: 'playMove',
+          blockType: Scratch.BlockType.COMMAND,
+          text: 'berechne Zug mit Elo [ELO] Skill [SKILL] Tiefe [DEPTH]',
+          arguments: {
+            ELO: { type: Scratch.ArgumentType.STRING, defaultValue: '1500' },
+            SKILL: { type: Scratch.ArgumentType.STRING, defaultValue: '3' },
+            DEPTH: { type: Scratch.ArgumentType.STRING, defaultValue: '5' }
+          }
         }
       ]
     };
@@ -139,6 +157,53 @@ class StockfishExtension {
     const elo = Math.min(2850, Math.max(1350, Math.round(args.ELO)));
     this.worker.postMessage('setoption name UCI_LimitStrength value true');
     this.worker.postMessage(`setoption name UCI_Elo value ${elo}`);
+  }
+
+  setSkillLevel(args) {
+    if (!this.worker) {
+      console.warn('Stockfish: Engine noch nicht bereit');
+      return;
+    }
+    const level = Math.min(20, Math.max(0, Math.round(args.LEVEL)));
+    // Skill Level ist eine eigenständige Option, braucht kein UCI_LimitStrength
+    this.worker.postMessage(`setoption name Skill Level value ${level}`);
+  }
+
+  playMove(args) {
+    if (!this.worker) {
+      console.warn('Stockfish: Engine noch nicht bereit');
+      return Promise.resolve();
+    }
+
+    const eloRaw = String(args.ELO).trim().toLowerCase();
+    const skillRaw = String(args.SKILL).trim().toLowerCase();
+    const depthRaw = String(args.DEPTH).trim().toLowerCase();
+
+    // "max" in Elo ODER Skill schaltet jede Begrenzung komplett ab
+    if (eloRaw === 'max' || skillRaw === 'max') {
+      this.worker.postMessage('setoption name UCI_LimitStrength value false');
+      this.worker.postMessage('setoption name Skill Level value 20');
+    } else {
+      const elo = Math.min(2850, Math.max(1350, Math.round(Number(eloRaw)) || 1500));
+      const skill = Math.min(20, Math.max(0, Math.round(Number(skillRaw)) || 3));
+      this.worker.postMessage('setoption name UCI_LimitStrength value true');
+      this.worker.postMessage(`setoption name UCI_Elo value ${elo}`);
+      this.worker.postMessage(`setoption name Skill Level value ${skill}`);
+    }
+
+    // "max" bei Tiefe nutzt eine hohe, starke Suchtiefe
+    const depth = depthRaw === 'max' ? 20 : Math.max(1, Math.round(Number(depthRaw)) || 5);
+
+    // Zug berechnen und warten, bis er fertig ist
+    this.bestMove = '';
+    this.worker.postMessage(`go depth ${depth}`);
+    return new Promise((resolve) => {
+      const check = () => {
+        if (this.bestMove) resolve();
+        else setTimeout(check, 100);
+      };
+      check();
+    });
   }
 }
 
