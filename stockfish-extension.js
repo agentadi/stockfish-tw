@@ -7,6 +7,8 @@ class StockfishExtension {
     this.ready = false;
     this.bestMove = '';
     this.lastLine = '';
+    this.noLegalMoves = false;
+    this.lastCheckers = null;
     this._initWorker();
   }
 
@@ -30,7 +32,17 @@ class StockfishExtension {
         this.lastLine = line;
         if (line === 'uciok') this.ready = true;
         if (line.startsWith('bestmove')) {
-          this.bestMove = line.split(' ')[1] || '';
+          const move = line.split(' ')[1] || '';
+          if (move === '(none)') {
+            this.bestMove = '';
+            this.noLegalMoves = true;
+          } else {
+            this.bestMove = move;
+            this.noLegalMoves = false;
+          }
+        }
+        if (line.startsWith('Checkers:')) {
+          this.lastCheckers = line;
         }
       };
       this.worker.onerror = (err) => {
@@ -103,6 +115,16 @@ class StockfishExtension {
             SKILL: { type: Scratch.ArgumentType.STRING, defaultValue: '3' },
             DEPTH: { type: Scratch.ArgumentType.STRING, defaultValue: '5' }
           }
+        },
+        {
+          opcode: 'isGameOver',
+          blockType: Scratch.BlockType.BOOLEAN,
+          text: 'Spiel vorbei (kein Zug mehr möglich)?'
+        },
+        {
+          opcode: 'getResult',
+          blockType: Scratch.BlockType.REPORTER,
+          text: 'Ergebnis (schachmatt/patt/offen)'
         }
       ]
     };
@@ -204,6 +226,34 @@ class StockfishExtension {
       };
       check();
     });
+  }
+
+  isGameOver() {
+    return this.noLegalMoves;
+  }
+
+  async getResult() {
+    if (!this.worker) return '';
+    if (!this.noLegalMoves) return 'offen';
+
+    // Frag die Engine per Debug-Kommando "d", ob der König gerade im Schach steht
+    this.lastCheckers = null;
+    this.worker.postMessage('d');
+
+    await new Promise((resolve) => {
+      const start = Date.now();
+      const check = () => {
+        if (this.lastCheckers !== null || Date.now() - start > 1000) resolve();
+        else setTimeout(check, 50);
+      };
+      check();
+    });
+
+    const checkersValue = this.lastCheckers
+      ? this.lastCheckers.replace('Checkers:', '').trim()
+      : '';
+
+    return checkersValue !== '' ? 'schachmatt' : 'patt';
   }
 }
 
