@@ -154,11 +154,12 @@ class StockfishExtension {
       this.worker.postMessage(`go depth ${depth}`);
     }
 
-    // Zug berechnen und warten, bis er fertig ist
+    // Zug berechnen und warten, bis er fertig ist (auch bei Schachmatt/Patt!)
     this.bestMove = '';
+    this.noLegalMoves = false;
     return new Promise((resolve) => {
       const check = () => {
-        if (this.bestMove) resolve();
+        if (this.bestMove || this.noLegalMoves) resolve();
         else setTimeout(check, 100);
       };
       check();
